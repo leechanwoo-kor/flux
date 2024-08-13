@@ -28,7 +28,6 @@ MODEL_CONFIGS = {
             "aspect_ratio": "1:1",
             "output_format": "webp",
             "output_quality": 90,
-            "seed": 4823,
         },
     },
     "flux-dev (Disabled)": {
@@ -46,11 +45,13 @@ MODEL_CONFIGS = {
 }
 
 
-def generate_image(prompt, model_key):
+def generate_image(prompt, model_key, seed=None):
     model_config = MODEL_CONFIGS[model_key]
 
     input_params = model_config["params"].copy()
     input_params["prompt"] = prompt
+    if seed is not None:
+        input_params["seed"] = seed
 
     output = replicate.run(model_config["model"], input=input_params)
 
@@ -58,14 +59,13 @@ def generate_image(prompt, model_key):
     if isinstance(output, dict):
         image_url = output.get("output", [None])[0]
         logs = output.get("logs", "")
-        seed = None
-        if logs:
+        if seed is None:
             seed_match = re.search(r"Using seed: (\d+)", logs)
             if seed_match:
                 seed = int(seed_match.group(1))
     elif isinstance(output, list) and len(output) > 0:
         image_url = output[0]
-        seed = None  # The seed might not be available in the list output
+        # The seed might not be available in the list output if it wasn't provided
     else:
         raise ValueError("Unexpected output format from the model")
 
@@ -98,23 +98,40 @@ def generate_image(prompt, model_key):
 st.set_page_config(page_title="Image Generator", page_icon="🖼️")
 st.title("Image Generator")
 
-# Model selection
-model_options = list(MODEL_CONFIGS.keys())
-selected_model = st.selectbox(
-    "Select Model",
-    model_options,
-    index=0,
-    format_func=lambda x: x if x != "flux-dev (Disabled)" else f"{x} ⚠️",
-)
+# Create two columns for the model selection and seed input
+col1, col2 = st.columns(2)
+
+with col1:
+    # Model selection
+    model_options = list(MODEL_CONFIGS.keys())
+    selected_model = st.selectbox(
+        "Select Model",
+        model_options,
+        index=0,
+        format_func=lambda x: x if x != "flux-dev (Disabled)" else f"{x} ⚠️",
+    )
+
+with col2:
+    seed_input = st.number_input(
+        "Seed (optional)",
+        min_value=0,
+        max_value=2**32 - 1,
+        value=None,
+        step=1,
+        help="Enter a seed for reproducible results",
+    )
 
 prompt = st.text_area("Enter your prompt here...", height=100)
+
+# Generate Image button
+generate_button = st.button("Generate Image", use_container_width=True)
 
 if "generated_image" not in st.session_state:
     st.session_state.generated_image = None
 if "seed" not in st.session_state:
     st.session_state.seed = None
 
-if st.button("Generate Image"):
+if generate_button:
     if prompt:
         if selected_model == "flux-dev (Disabled)":
             st.error(
@@ -123,7 +140,9 @@ if st.button("Generate Image"):
         else:
             with st.spinner("Generating image... This may take a while."):
                 try:
-                    image_path, seed = generate_image(prompt, selected_model)
+                    image_path, seed = generate_image(
+                        prompt, selected_model, seed_input
+                    )
                     st.session_state.generated_image = image_path
                     st.session_state.seed = seed
                     st.success(
