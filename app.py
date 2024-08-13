@@ -2,6 +2,7 @@ import streamlit as st
 import replicate
 import requests
 import os
+import re
 import uuid
 import json
 from datetime import datetime
@@ -27,6 +28,7 @@ MODEL_CONFIGS = {
             "aspect_ratio": "1:1",
             "output_format": "webp",
             "output_quality": 90,
+            "seed": 4823,
         },
     },
     "flux-dev (Disabled)": {
@@ -43,6 +45,7 @@ MODEL_CONFIGS = {
     },
 }
 
+
 def generate_image(prompt, model_key):
     model_config = MODEL_CONFIGS[model_key]
 
@@ -53,20 +56,30 @@ def generate_image(prompt, model_key):
 
     # Extract the image URL and seed from the output
     if isinstance(output, dict):
-        image_url = output.get("image")
-        seed = output.get("seed")
+        image_url = output.get("output", [None])[0]
+        logs = output.get("logs", "")
+        seed = None
+        if logs:
+            seed_match = re.search(r"Using seed: (\d+)", logs)
+            if seed_match:
+                seed = int(seed_match.group(1))
     elif isinstance(output, list) and len(output) > 0:
         image_url = output[0]
         seed = None  # The seed might not be available in the list output
     else:
         raise ValueError("Unexpected output format from the model")
 
+    if not image_url:
+        raise ValueError("No image URL found in the model output")
+
     response = requests.get(image_url)
     response.raise_for_status()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = uuid.uuid4().hex[:8]
-    filename = f"generated_image_{timestamp}_{unique_id}.{input_params['output_format']}"
+    filename = (
+        f"generated_image_{timestamp}_{unique_id}.{input_params['output_format']}"
+    )
 
     image_path = os.path.join("images", filename)
     with open(image_path, "wb") as f:
@@ -80,6 +93,7 @@ def generate_image(prompt, model_key):
 
     return image_path, seed
 
+
 # Streamlit app configuration
 st.set_page_config(page_title="Image Generator", page_icon="🖼️")
 st.title("Image Generator")
@@ -90,7 +104,7 @@ selected_model = st.selectbox(
     "Select Model",
     model_options,
     index=0,
-    format_func=lambda x: x if x != "flux-dev (Disabled)" else f"{x} ⚠️"
+    format_func=lambda x: x if x != "flux-dev (Disabled)" else f"{x} ⚠️",
 )
 
 prompt = st.text_area("Enter your prompt here...", height=100)
@@ -103,14 +117,18 @@ if "seed" not in st.session_state:
 if st.button("Generate Image"):
     if prompt:
         if selected_model == "flux-dev (Disabled)":
-            st.error("The flux-dev model is currently disabled. Please select another model.")
+            st.error(
+                "The flux-dev model is currently disabled. Please select another model."
+            )
         else:
             with st.spinner("Generating image... This may take a while."):
                 try:
                     image_path, seed = generate_image(prompt, selected_model)
                     st.session_state.generated_image = image_path
                     st.session_state.seed = seed
-                    st.success(f"Image generated successfully and saved to {image_path}")
+                    st.success(
+                        f"Image generated successfully and saved to {image_path}"
+                    )
                     if seed:
                         st.info(f"Seed value: {seed}")
                 except Exception as e:
