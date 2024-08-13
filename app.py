@@ -25,7 +25,7 @@ MODEL_CONFIGS = {
         "model": "black-forest-labs/flux-schnell",
         "params": {
             "num_outputs": 1,
-            "aspect_ratio": "1:1",
+            "aspect_ratio": "9:16",
             "output_format": "webp",
             "output_quality": 90,
         },
@@ -35,7 +35,7 @@ MODEL_CONFIGS = {
         "params": {
             "guidance": 3.5,
             "num_outputs": 1,
-            "aspect_ratio": "1:1",
+            "aspect_ratio": "9:16",
             "output_format": "webp",
             "output_quality": 80,
             "prompt_strength": 0.8,
